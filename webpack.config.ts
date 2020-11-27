@@ -1,12 +1,14 @@
 import * as path from "path";
 import * as webpack from "webpack";
-import forkTsCheckerWebpackPlugin from "fork-ts-checker-webpack-plugin";
 import HtmlWebpackPlugin from "html-webpack-plugin";
+import StyleLintWebpackPlugin from "stylelint-webpack-plugin";
+import MiniCssExtractPlugin from "mini-css-extract-plugin";
+import { CleanWebpackPlugin } from "clean-webpack-plugin";
 
-process.env.NODE_ENV = "development";
+const isDevelopment = process.env.NODE_ENV == "development";
 
 const config: webpack.Configuration = {
-  mode: "development",
+  mode: isDevelopment ? "development" : "production",
   target: "web",
   devtool: "cheap-module-source-map",
   entry: "./src/index.tsx",
@@ -18,6 +20,7 @@ const config: webpack.Configuration = {
     contentBase: path.join(__dirname, "build"),
     compress: true,
     port: 4000,
+    hot: true,
   },
   plugins: [
     new webpack.DefinePlugin({
@@ -26,28 +29,41 @@ const config: webpack.Configuration = {
     new HtmlWebpackPlugin({
       template: path.resolve(__dirname, "public", "index.html"),
     }),
-    new forkTsCheckerWebpackPlugin({
-      async: false,
-      eslint: {
-        files: "./src/**/*",
-      },
+    new MiniCssExtractPlugin({
+      filename: isDevelopment ? "[name].css" : "[name].[hash].css",
+      chunkFilename: isDevelopment ? "[id].css" : "[id].[hash].css",
     }),
+    new StyleLintWebpackPlugin({
+      configFile: path.resolve(__dirname, "stylelint.config.js"),
+    }),
+    new CleanWebpackPlugin(),
   ],
   module: {
     rules: [
       {
         test: /\.(ts|js)x?$/,
         exclude: /node_modules/,
-        use: {
-          loader: "babel-loader",
-          options: {
-            presets: [
-              "@babel/preset-env",
-              "@babel/preset-react",
-              "@babel/preset-typescript",
-            ],
+        use: [
+          {
+            loader: "babel-loader",
+            options: {
+              presets: [
+                "@babel/preset-env",
+                "@babel/preset-react",
+                "@babel/preset-typescript",
+              ],
+              plugins: [
+                [
+                  "@babel/plugin-transform-runtime",
+                  {
+                    regenerator: true,
+                  },
+                ],
+              ],
+            },
           },
-        },
+          "eslint-loader",
+        ],
       },
       {
         test: /\.js$/,
@@ -55,8 +71,26 @@ const config: webpack.Configuration = {
         enforce: "pre",
       },
       {
-        test: /(\.css)$/,
-        use: ["style-loader", "css-loader"],
+        test: /\.css$/i,
+        use: [
+          isDevelopment ? "style-loader" : MiniCssExtractPlugin.loader,
+          {
+            loader: "css-loader",
+            options: {
+              modules: true,
+              sourceMap: isDevelopment,
+              importLoaders: 1,
+            },
+          },
+          {
+            loader: "postcss-loader",
+            options: {
+              postcssOptions: {
+                config: path.resolve(__dirname, "postcss.config.js"),
+              },
+            },
+          },
+        ],
       },
       {
         test: /\.s[ac]ss$/i,
